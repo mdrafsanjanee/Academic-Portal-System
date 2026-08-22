@@ -153,7 +153,9 @@ The project was created to apply fundamental C programming concepts to a practic
 
 Developed as a group academic project.
 
-MD. Rafsan Janee
+MD. Rafsan Janee.
+[Github](https://github.com/mdrafsanjanee).
+
 Department of Computer Science and Engineering.
 
 ## License
