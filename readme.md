@@ -1,163 +1,143 @@
 # Academic System Portal
 
-A console-based **Academic Management System** developed in C as a university CSE project.
+A lightweight **Academic Management System written in C**, built around a simple console interface and text-file persistence. The project demonstrates practical use of structures, arrays, functions, file handling, validation, sorting, and role-based menus.
 
-The Academic System Portal is designed to simplify common academic management tasks such as student records, faculty information, attendance, marks, grades, and quizzes through a menu-driven console interface.
+[![Build](https://github.com/mdrafsanjanee/Academic-Portal-System/actions/workflows/build.yml/badge.svg)](https://github.com/mdrafsanjanee/Academic-Portal-System/actions/workflows/build.yml)
+
+## Why this project?
+
+The goal is not to hide the implementation behind a framework. It is a deliberately simple C application organized like a small real-world software project: source code is separated from application data, the release is reproducible, and users can download a ready-to-run Windows package.
 
 ## Features
 
-* Student record management
-* Faculty information management
-* Student attendance management
-* Marks and grade management
-* Quiz management
-* Student search and record viewing
-* Persistent data storage using text files
-* Console-based menu navigation
-* Separate access areas for different system functions
+### Faculty
+- Student record creation, update, search and deletion
+- Attendance management
+- Exam mark entry and automatic grade assignment
+- Student record sorting by ID or marks
+- Faculty ID-based access
+- Persistent text-file storage
 
-## Technologies Used
-
-* **C**
-* **File Handling**
-* **Structures**
-* **Arrays**
-* **Functions**
-* **Conditional Statements & Loops**
-* **Text-based Database Storage**
+### Students
+- Personal academic record
+- Attendance and CGPA overview
+- SGPA calculator
+- CGPA goal tracker
+- Study timer
+- Quiz system
 
 ## Project Structure
 
 ```text
 Academic-Portal-System/
-│
-├── Backup/
-│   └── Prototype of System Portal.c
-│
-├── Editable items/
-│   └── AcademicPortalFlowchart.drawio
-│
-├── Submitables/
-│   ├── AcademicSystemPortal.c
-│   ├── AcademicPortalFlowchart.drawio
-│   ├── Presentation of Academic System Portal.pptx
-│   ├── Project Report of Academic System Portal.pdf
-│   ├── classCount.txt
-│   ├── facultyDB.txt
-│   └── stdDB.txt
-│
+├── src/
+│   └── AcademicSystemPortal.c       # Release build entry point
+├── data/
+│   ├── stdDB.txt                    # Demo student data
+│   ├── facultyDB.txt                # Demo faculty data
+│   ├── classCount.txt               # Attendance state
+│   └── quiz.txt                     # Quiz data
+├── .github/
+│   └── workflows/
+│       └── build.yml                # Automated Windows build/package
+├── Backup/                          # Earlier development prototype
+├── Editable items/                  # Editable project assets
+├── Submitables/                     # Original academic submission
 ├── LICENSE
 └── README.md
 ```
 
-> The project structure may change as the application is prepared for standalone distribution.
+The original academic implementation is retained under `Submitables/` for transparency. The release entry point in `src/` wraps that implementation and makes the application's data location independent of the directory from which the executable is launched.
 
-## Getting Started
+## Download & Run
 
-### Running from Source
+### Windows release
 
-To compile and run the project from source, you need a C compiler such as **GCC**.
+The recommended way to use the application is to download the latest **Windows ZIP** from the repository's GitHub Releases page.
 
-Using GCC:
+1. Download `AcademicSystemPortal-Windows.zip`.
+2. Extract the ZIP.
+3. Open the extracted `AcademicSystemPortal` folder.
+4. Run `AcademicSystemPortal.exe`.
+
+No compiler or development environment is required for a release build.
+
+### Demo accounts
+
+The repository contains intentionally generic demo data:
+
+| Role | ID |
+|---|---:|
+| Faculty | `9001` |
+| Student | `1001` |
+
+These are demonstration credentials only and are not intended as real authentication.
+
+## Build from Source
+
+A Windows machine with GCC/MinGW can build the application with:
 
 ```bash
-gcc "Submitables/AcademicSystemPortal.c" -o AcademicSystemPortal
+gcc src/AcademicSystemPortal.c -std=c11 -Wall -Wextra -o AcademicSystemPortal.exe
 ```
 
-Then run:
+The application changes to its executable directory at startup and uses the `data` directory there, so the program does not depend on the caller's working directory.
 
-### Windows
+## Automated Build
 
-```bash
-AcademicSystemPortal.exe
-```
+Every push and pull request is checked by GitHub Actions. Version tags such as `v1.0.0` automatically produce a Windows ZIP release package.
 
-## Data Storage
+The workflow builds the executable, packages it with its required data files, uploads the build artifact, and publishes the package to GitHub Releases for version tags.
 
-The current version uses text files for persistent data storage.
+## Data Model
 
-The main database files include:
+The project intentionally uses plain text files instead of an external database so the implementation remains easy to understand and suitable for an introductory C project.
 
 ```text
 stdDB.txt
+  ID Name Department Semester Attendance Marks Grade CGPA
+
 facultyDB.txt
+  ID Name Department
+
 classCount.txt
+  Total classes
+
+quiz.txt
+  Question|Option A|Option B|Option C|Option D|Correct option
 ```
 
-The database system is currently file-based and intended for a small-scale academic management environment.
+The data directory is separate from the source code and executable, making it easier to back up, reset, or replace application data without modifying the program.
 
-> **Note:** The database/storage system is planned to be improved in future versions. The application will eventually use a dedicated data directory so that database files are handled independently from the executable.
+## Technologies
 
-## Download
+- C11-compatible C compiler
+- Standard C file I/O
+- Structures and arrays
+- Functions and modular programming
+- Windows API for application-directory handling and console timing
+- GitHub Actions for automated builds and releases
 
-A standalone Windows executable will be provided through **GitHub Releases** once the application has been packaged and tested.
+## Project Context
 
-The planned distribution will allow users to:
+Developed as a **CSE103** university project at **East West University** to apply fundamental C programming concepts to a practical academic management system.
 
-1. Download the release package.
-2. Extract the files.
-3. Run `AcademicSystemPortal.exe`.
+The project is being maintained beyond the original coursework submission as a small software-engineering exercise focused on code organization, usability, reproducible builds, and distribution.
 
-No development environment will be required to run the released version.
+## Current Scope
 
-## Documentation
+This is a small-scale, local, single-user-at-a-time academic management application. It is not intended to provide production-grade authentication, concurrent database access, or network functionality.
 
-The repository includes supporting project materials:
+Potential future upgrades include:
 
-* **Project Report** — Detailed documentation of the system and development process.
-* **Presentation** — Project presentation slides.
-* **Flowchart** — Visual representation of the system's workflow.
-* **Source Code** — Complete C implementation.
-
-## Limitations
-
-The current version has several limitations:
-
-* Uses text files instead of a dedicated database system.
-* Console-based user interface.
-* Designed primarily for a small-scale academic environment.
-* Limited data validation and security compared with production systems.
-* The current data storage mechanism depends on the application's file paths.
-* No network or multi-user functionality.
-
-## Future Scope
-
-Possible improvements include:
-
-* Dedicated database integration such as SQLite or MySQL.
-* Improved data validation and error handling.
-* A graphical user interface.
-* User authentication and role-based access control.
-* Improved database security.
-* Automated backup and recovery.
-* Network-based multi-user functionality.
-* Improved reporting and analytics.
-* Standalone Windows installer.
-* More robust application data management.
-
-## Academic Context
-
-This project was developed as part of the **CSE103** coursework at **East West University**.
-
-The project was created to apply fundamental C programming concepts to a practical academic management scenario, particularly:
-
-* Structures
-* Functions
-* Arrays
-* File handling
-* Input/output
-* Control flow
-* Modular programming
-
-## Contributors
-
-Developed as a group academic project.
-
-MD. Rafsan Janee.
-[Github](https://github.com/mdrafsanjanee).
-
-Department of Computer Science and Engineering.
+- SQLite-backed storage
+- Stronger input validation
+- Proper authentication and password hashing
+- Backup/export tools
+- Reports and analytics
+- A graphical interface
+- Multi-user/network support
 
 ## License
 
-This project is licensed under the **MIT License**.
+MIT License. See [LICENSE](LICENSE).

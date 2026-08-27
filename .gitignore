@@ -1,0 +1,15 @@
+# Build output
+dist/
+build/
+package/
+*.exe
+*.zip
+
+# IDE / editor files
+.vscode/
+.idea/
+
+# Local application state generated during development
+# Keep the clean demo data tracked; ignore additional local backups.
+data/*.bak
+data/*.backup
