@@ -335,8 +335,7 @@ static int faculty_login(char *name, char *dept, size_t name_size, size_t dept_s
 
     while (fgets(buffer, sizeof(buffer), fp)) {
         trim_newline(buffer);
-        if (sscanf(buffer, "%d|%63[^|]|%31[^
-]", &id, name, dept) == 3 && id == wanted) {
+        if (sscanf(buffer, "%d|%63[^|]|%31[^\n]", &id, name, dept) == 3 && id == wanted) {
             name[name_size - 1] = '\0';
             dept[dept_size - 1] = '\0';
             fclose(fp);
