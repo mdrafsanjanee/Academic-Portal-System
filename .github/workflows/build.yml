@@ -30,9 +30,9 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path package\AcademicSystemPortal\data | Out-Null
           Copy-Item dist\AcademicSystemPortal.exe package\AcademicSystemPortal\
-          Copy-Item data\students.txt package\AcademicSystemPortal\data\
-          Copy-Item data\faculty.txt package\AcademicSystemPortal\data\
-          Copy-Item data\class_count.txt package\AcademicSystemPortal\data\
+          Copy-Item data\stdDB.txt package\AcademicSystemPortal\data\
+          Copy-Item data\facultyDB.txt package\AcademicSystemPortal\data\
+          Copy-Item data\classCount.txt package\AcademicSystemPortal\data\
           Copy-Item data\quiz.txt package\AcademicSystemPortal\data\
           Compress-Archive -Path package\AcademicSystemPortal -DestinationPath dist\AcademicSystemPortal-Windows.zip -Force
 
