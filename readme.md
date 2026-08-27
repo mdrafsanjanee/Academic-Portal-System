@@ -33,9 +33,9 @@ Academic-Portal-System/
 ├── src/
 │   └── AcademicSystemPortal.c       # Release build entry point
 ├── data/
-│   ├── students.txt                 # Demo student data
-│   ├── faculty.txt                  # Demo faculty data
-│   ├── class_count.txt              # Attendance state
+│   ├── stdDB.txt                    # Demo student data
+│   ├── facultyDB.txt                # Demo faculty data
+│   ├── classCount.txt               # Attendance state
 │   └── quiz.txt                     # Quiz data
 ├── .github/
 │   └── workflows/
@@ -81,26 +81,26 @@ A Windows machine with GCC/MinGW can build the application with:
 gcc src/AcademicSystemPortal.c -std=c11 -Wall -Wextra -o AcademicSystemPortal.exe
 ```
 
-The application creates/uses a `data` directory next to the executable and stores its text-file data there.
+The application changes to its executable directory at startup and uses the `data` directory there, so the program does not depend on the caller's working directory.
 
 ## Automated Build
 
 Every push and pull request is checked by GitHub Actions. Version tags such as `v1.0.0` automatically produce a Windows ZIP release package.
 
-The workflow builds the executable, packages the executable with its required data files, uploads the build artifact, and publishes the package to GitHub Releases for version tags.
+The workflow builds the executable, packages it with its required data files, uploads the build artifact, and publishes the package to GitHub Releases for version tags.
 
 ## Data Model
 
 The project intentionally uses plain text files instead of an external database so the implementation remains easy to understand and suitable for an introductory C project.
 
 ```text
-students.txt
+stdDB.txt
   ID Name Department Semester Attendance Marks Grade CGPA
 
-faculty.txt
+facultyDB.txt
   ID Name Department
 
-class_count.txt
+classCount.txt
   Total classes
 
 quiz.txt
