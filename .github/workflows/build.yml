@@ -1,0 +1,51 @@
+name: Build Windows Release
+
+on:
+  push:
+    branches: [master, refactor/professional-release]
+    tags: ['v*']
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Build
+        shell: cmd
+        run: |
+          if not exist dist mkdir dist
+          gcc src\AcademicSystemPortal.c -std=c11 -Wall -Wextra -o dist\AcademicSystemPortal.exe
+
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path package\AcademicSystemPortal\data | Out-Null
+          Copy-Item dist\AcademicSystemPortal.exe package\AcademicSystemPortal\
+          Copy-Item data\students.txt package\AcademicSystemPortal\data\
+          Copy-Item data\faculty.txt package\AcademicSystemPortal\data\
+          Copy-Item data\class_count.txt package\AcademicSystemPortal\data\
+          Copy-Item data\quiz.txt package\AcademicSystemPortal\data\
+          Compress-Archive -Path package\AcademicSystemPortal -DestinationPath dist\AcademicSystemPortal-Windows.zip -Force
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AcademicSystemPortal-Windows
+          path: dist/AcademicSystemPortal-Windows.zip
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create $env:GITHUB_REF_NAME dist/AcademicSystemPortal-Windows.zip --title "Academic System Portal $env:GITHUB_REF_NAME" --generate-notes
