@@ -191,11 +191,11 @@ void headerf(const char *title) {
     system("cls");
 
     printf("\n==================================================================\n");
-    printf("||                  ACADEMIC SYSTEM PORTAL                       ||\n");
+    printf("||                  ACADEMIC SYSTEM PORTAL                      ||\n");
     printf("==================================================================\n");
 
     if (title != NULL) {
-        printf("||  %-62s||\n", title);
+        printf("||  %-60s||\n", title);
         printf("==================================================================\n");
     }
 }
@@ -294,15 +294,15 @@ void printStudent(Student *s, int totalClass) {
         attendancePercent = (s->attendance * 100.0f) / totalClass;
 
     printf("\n+--------------------------------------------------------------+\n");
-    printf("| ID         : %-46d |\n", s->id);
-    printf("| Name       : %-46s |\n", s->name);
-    printf("| Department : %-46s |\n", s->dept);
-    printf("| Semester   : %-46d |\n", s->semester);
-    printf("| Attendance : %d (%6.2f%%)%35s |\n",
+    printf("| ID         : %-47d |\n", s->id);
+    printf("| Name       : %-47s |\n", s->name);
+    printf("| Department : %-47s |\n", s->dept);
+    printf("| Semester   : %-47d |\n", s->semester);
+    printf("| Attendance : %d (%6.2f%%)%36s |\n",
            s->attendance, attendancePercent, "");
-    printf("| Marks      : %-46.2f |\n", s->marks);
-    printf("| Grade      : %-46s |\n", s->grade);
-    printf("| CGPA       : %-46.2f |\n", s->cgpa);
+    printf("| Marks      : %-47.2f |\n", s->marks);
+    printf("| Grade      : %-47s |\n", s->grade);
+    printf("| CGPA       : %-47.2f |\n", s->cgpa);
     printf("+--------------------------------------------------------------+\n");
 }
 
@@ -340,23 +340,17 @@ void assignGrade(Student *s) {
 
 /* ---------- Main ---------- */
 
-void teacherPortal(void);
-void stdPortal(int userid);
+void teacherPortal(void);           void stdPortal(int userid);
 
-void addStd(void);
-void stdrecords(int userid);
-void searchStd(void);
-void stopwatch(void);
-void updateStd(void);
-void quiz(int userid);
-void deleteStd(void);
+void addStd(void);                  void stdrecords(int userid);
+void searchStd(void);               void stopwatch(void);
+void updateStd(void);               void utilities(int userid);
+void deleteStd(void);               void sgpa(int userid);
+void showStds(void);                void goalTracker(int userid);
+void marksInput(void);              void quiz(int userid);
 void addQuiz(void);
-void showStds(void);
-void utilities(int userid);
-void goalTracker(int userid);
 void attendance(void);
-void sgpa(int userid);
-void marksInput(void);
+
 
 int facultyLogin(char faculty[], char dept[]) {
     FILE *fp = fopen(FACULTY_DB, "r");
@@ -402,7 +396,7 @@ int main(void) {
 
         if (facultyLogin(faculty, dept)) {
             printf("\n  Welcome, %s (%s Department)\n", faculty, dept);
-            Sleep(700);
+            Sleep(1000);
             teacherPortal();
         } else {
             errorMessage("Access denied. Faculty ID not found.");

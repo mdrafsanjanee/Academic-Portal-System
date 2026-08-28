@@ -1,0 +1,2 @@
+Test run?|yes|no|maybe|maybe not|A
+was that wrong?|yes|no|yes bo|no yes|A
