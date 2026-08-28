@@ -1,44 +1,23 @@
-/*
- * Academic System Portal
- * A small, file-based academic management system written in C.
- *
- * The implementation intentionally stays in one source file so it remains
- * approachable for C students while keeping clear section boundaries.
- */
-
-#include <ctype.h>
-#include <errno.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
-#include <time.h>
-
-#ifdef _WIN32
-#include <direct.h>
+#include <stdlib.h>
+#include <ctype.h>
 #include <windows.h>
-#define PATH_SEP "\\"
-#else
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <unistd.h>
-#define PATH_SEP "/"
-#endif
+#include <direct.h>
 
 #define MAX_STUDENTS 100
-#define MAX_NAME 64
-#define MAX_DEPT 32
 #define MAX_LINE 512
-#define MAX_PATH_LEN 1024
+#define DATA_DIR "data\\"
+#define STUDENT_DB DATA_DIR "stdDB.txt"
+#define FACULTY_DB DATA_DIR "facultyDB.txt"
+#define CLASS_COUNT_DB DATA_DIR "classCount.txt"
+#define QUIZ_DB DATA_DIR "quiz.txt"
+#define SGPA_DB DATA_DIR "sgpa.txt"
 
 typedef struct {
-    int id;
-    char name[MAX_NAME];
-    char dept[MAX_DEPT];
-    int semester;
-    int attendance;
-    float marks;
-    char grade[3];
-    float cgpa;
+    int id, semester, attendance;
+    float marks, cgpa;
+    char name[50], dept[20], grade[3];
 } Student;
 
 typedef struct {
@@ -47,592 +26,997 @@ typedef struct {
     char correct;
 } Quiz;
 
-static char app_dir[MAX_PATH_LEN];
-static char data_dir[MAX_PATH_LEN];
-static char student_db[MAX_PATH_LEN];
-static char faculty_db[MAX_PATH_LEN];
-static char class_count_db[MAX_PATH_LEN];
-static char quiz_db[MAX_PATH_LEN];
-static char sgpa_db[MAX_PATH_LEN];
+/* ---------- Basic helpers ---------- */
 
-/* ---------- Platform helpers ---------- */
-static void sleep_ms(unsigned int ms) {
-#ifdef _WIN32
-    Sleep(ms);
-#else
-    clock_t start = clock();
-    clock_t ticks = (clock_t)((ms / 1000.0) * CLOCKS_PER_SEC);
-    while (clock() - start < ticks) { }
-#endif
-}
-
-static void clear_screen(void) {
-#ifdef _WIN32
-    system("cls");
-#else
-    system("clear");
-#endif
-}
-
-static void make_directory(const char *path) {
-#ifdef _WIN32
-    _mkdir(path);
-#else
-    mkdir(path, 0755);
-#endif
-}
-
-static void set_application_directory(void) {
-#ifdef _WIN32
-    char path[MAX_PATH];
-    DWORD length = GetModuleFileNameA(NULL, path, MAX_PATH);
-    if (length == 0 || length >= MAX_PATH) {
-        if (_getcwd(app_dir, sizeof(app_dir)) == NULL) strcpy(app_dir, ".");
-    } else {
-        char *slash = strrchr(path, '\\');
-        if (!slash) slash = strrchr(path, '/');
-        if (slash) *slash = '\0';
-        strncpy(app_dir, path, sizeof(app_dir) - 1);
-        app_dir[sizeof(app_dir) - 1] = '\0';
-    }
-#else
-    if (getcwd(app_dir, sizeof(app_dir)) == NULL) strcpy(app_dir, ".");
-#endif
-
-    snprintf(data_dir, sizeof(data_dir), "%s%sdata", app_dir, PATH_SEP);
-    snprintf(student_db, sizeof(student_db), "%sstudents.txt", data_dir);
-    snprintf(faculty_db, sizeof(faculty_db), "%sfaculty.txt", data_dir);
-    snprintf(class_count_db, sizeof(class_count_db), "%sclass_count.txt", data_dir);
-    snprintf(quiz_db, sizeof(quiz_db), "%squiz.txt", data_dir);
-    snprintf(sgpa_db, sizeof(sgpa_db), "%ssgpa.txt", data_dir);
-    make_directory(data_dir);
-}
-
-/* ---------- Input helpers ---------- */
-static void discard_remaining_input(void) {
+void clearInput(void) {
     int c;
-    while ((c = getchar()) != '\n' && c != EOF) { }
+    while ((c = getchar()) != '\n' && c != EOF);
 }
 
-static void trim_newline(char *text) { text[strcspn(text, "\r\n")] = '\0'; }
+void pressEnter(void) {
+    char input[8];
+    printf("\nPress Enter to continue...");
+    fgets(input, sizeof(input), stdin);
+}
 
-static int read_line(const char *prompt, char *buffer, size_t size) {
-    printf("%s", prompt);
-    if (!fgets(buffer, (int)size, stdin)) return 0;
-    if (!strchr(buffer, '\n')) discard_remaining_input();
-    trim_newline(buffer);
+int fileExists(const char *fileName) {
+    FILE *fp = fopen(fileName, "r");
+    if (fp == NULL)
+        return 0;
+
+    fclose(fp);
     return 1;
 }
 
-static int parse_int(const char *text, int *value) {
-    char *end;
-    long parsed;
-    errno = 0;
-    parsed = strtol(text, &end, 10);
-    while (isspace((unsigned char)*end)) end++;
-    if (text == end || *end != '\0' || errno != 0) return 0;
-    if (parsed < -2147483647L - 1 || parsed > 2147483647L) return 0;
-    *value = (int)parsed;
-    return 1;
+void setupDataDirectory(void) {
+    char path[MAX_PATH];
+
+    if (GetModuleFileNameA(NULL, path, MAX_PATH) > 0) {
+        char *slash = strrchr(path, '\\');
+
+        if (slash != NULL) {
+            *slash = '\0';
+            SetCurrentDirectoryA(path);
+        }
+    }
+
+    _mkdir("data");
 }
 
-static int parse_float(const char *text, float *value) {
-    char *end;
-    float parsed;
-    errno = 0;
-    parsed = strtof(text, &end);
-    while (isspace((unsigned char)*end)) end++;
-    if (text == end || *end != '\0' || errno != 0) return 0;
-    *value = parsed;
-    return 1;
+void initializeDataFiles(void) {
+    FILE *fp;
+
+    if (!fileExists(STUDENT_DB)) {
+        fp = fopen(STUDENT_DB, "w");
+        if (fp != NULL) {
+            fprintf(fp, "1001 DemoStudent CSE 1 0 0.00 F 0.00\n");
+            fclose(fp);
+        }
+    }
+
+    if (!fileExists(FACULTY_DB)) {
+        fp = fopen(FACULTY_DB, "w");
+        if (fp != NULL) {
+            fprintf(fp, "9001 Faculty CSE\n");
+            fclose(fp);
+        }
+    }
+
+    if (!fileExists(CLASS_COUNT_DB)) {
+        fp = fopen(CLASS_COUNT_DB, "w");
+        if (fp != NULL) {
+            fprintf(fp, "0\n");
+            fclose(fp);
+        }
+    }
+
+    if (!fileExists(QUIZ_DB)) {
+        fp = fopen(QUIZ_DB, "w");
+        if (fp != NULL)
+            fclose(fp);
+    }
+
+    if (!fileExists(SGPA_DB)) {
+        fp = fopen(SGPA_DB, "w");
+        if (fp != NULL)
+            fclose(fp);
+    }
 }
 
-static int read_int_range(const char *prompt, int min, int max) {
+int readInt(const char *prompt, int min, int max) {
     char input[64];
     int value;
-    for (;;) {
-        if (!read_line(prompt, input, sizeof(input))) continue;
-        if (parse_int(input, &value) && value >= min && value <= max) return value;
-        printf("  Invalid input. Enter a number from %d to %d.\n", min, max);
-    }
+    char extra;
+
+    do {
+        printf("%s", prompt);
+
+        if (fgets(input, sizeof(input), stdin) == NULL)
+            continue;
+
+        if (sscanf(input, "%d %c", &value, &extra) == 1 &&
+            value >= min && value <= max)
+            return value;
+
+        printf("  Invalid input. Enter a value from %d to %d.\n", min, max);
+    } while (1);
 }
 
-static float read_float_range(const char *prompt, float min, float max) {
+float readFloat(const char *prompt, float min, float max) {
     char input[64];
     float value;
-    for (;;) {
-        if (!read_line(prompt, input, sizeof(input))) continue;
-        if (parse_float(input, &value) && value >= min && value <= max) return value;
+    char extra;
+
+    do {
+        printf("%s", prompt);
+
+        if (fgets(input, sizeof(input), stdin) == NULL)
+            continue;
+
+        if (sscanf(input, "%f %c", &value, &extra) == 1 &&
+            value >= min && value <= max)
+            return value;
+
         printf("  Invalid input. Enter a value from %.2f to %.2f.\n", min, max);
-    }
+    } while (1);
 }
 
-static char read_choice(const char *prompt, const char *valid) {
-    char input[32];
-    for (;;) {
-        if (!read_line(prompt, input, sizeof(input))) continue;
-        if (strlen(input) == 1) {
-            char choice = (char)toupper((unsigned char)input[0]);
-            if (strchr(valid, choice)) return choice;
+char readChoice(const char *prompt, const char *validChoices) {
+    char input[16];
+    char choice;
+
+    do {
+        printf("%s", prompt);
+
+        if (fgets(input, sizeof(input), stdin) == NULL)
+            continue;
+
+        if (sscanf(input, " %c", &choice) == 1) {
+            choice = (char)toupper((unsigned char)choice);
+
+            if (strlen(input) >= 2 && strchr(validChoices, choice) != NULL)
+                return choice;
         }
-        printf("  Invalid choice. Valid options: %s\n", valid);
+
+        printf("  Invalid choice. Valid options: %s\n", validChoices);
+    } while (1);
+}
+
+void readText(const char *prompt, char *text, int size) {
+    do {
+        printf("%s", prompt);
+
+        if (fgets(text, size, stdin) == NULL)
+            continue;
+
+        text[strcspn(text, "\r\n")] = '\0';
+
+        if (text[0] == '\0') {
+            printf("  This field cannot be empty.\n");
+            continue;
+        }
+
+        if (strchr(text, '|') != NULL) {
+            printf("  The character '|' is not allowed.\n");
+            continue;
+        }
+
+        return;
+    } while (1);
+}
+
+/* ---------- UI ---------- */
+
+void headerf(const char *title) {
+    system("cls");
+
+    printf("\n==================================================================\n");
+    printf("||                  ACADEMIC SYSTEM PORTAL                       ||\n");
+    printf("==================================================================\n");
+
+    if (title != NULL) {
+        printf("||  %-62s||\n", title);
+        printf("==================================================================\n");
     }
 }
 
-static void pause_screen(void) {
-    char dummy[8];
-    printf("\nPress Enter to continue...");
-    fgets(dummy, sizeof(dummy), stdin);
+void successMessage(const char *message) {
+    printf("\n[OK] %s\n", message);
 }
 
-/* ---------- UI helpers ---------- */
-static void line(int width, char fill) {
-    for (int i = 0; i < width; i++) putchar(fill);
-    putchar('\n');
-}
-
-static void banner(const char *title, const char *subtitle) {
-    clear_screen();
-    printf("\n");
-    line(64, '=');
-    printf("                 ACADEMIC SYSTEM PORTAL\n");
-    line(64, '=');
-    if (title && *title) printf("  %s\n", title);
-    if (subtitle && *subtitle) printf("  %s\n", subtitle);
-    line(64, '-');
-}
-
-static void success(const char *message) { printf("\n[OK] %s\n", message); }
-static void error_message(const char *message) { printf("\n[ERROR] %s\n", message); }
-
-/* ---------- File helpers ---------- */
-static int file_exists(const char *path) {
-    FILE *fp = fopen(path, "r");
-    if (!fp) return 0;
-    fclose(fp);
-    return 1;
-}
-
-static int write_default_file(const char *path, const char *content) {
-    FILE *fp = fopen(path, "w");
-    if (!fp) return 0;
-    fputs(content, fp);
-    fclose(fp);
-    return 1;
-}
-
-static void initialize_data_files(void) {
-    if (!file_exists(student_db)) write_default_file(student_db, "1001|Demo Student|CSE|1|0|0.00|F|0.00\n");
-    if (!file_exists(faculty_db)) write_default_file(faculty_db, "9001|Demo Faculty|CSE\n");
-    if (!file_exists(class_count_db)) write_default_file(class_count_db, "0\n");
-    if (!file_exists(quiz_db)) write_default_file(quiz_db, "");
-    if (!file_exists(sgpa_db)) write_default_file(sgpa_db, "");
-}
-
-static int replace_file(const char *temp_path, const char *target_path) {
-#ifdef _WIN32
-    return MoveFileExA(temp_path, target_path, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
-#else
-    return rename(temp_path, target_path) == 0;
-#endif
+void errorMessage(const char *message) {
+    printf("\n[ERROR] %s\n", message);
 }
 
 /* ---------- Student data ---------- */
-static int load_students(Student students[]) {
-    FILE *fp = fopen(student_db, "r");
-    char buffer[MAX_LINE];
-    int count = 0;
-    if (!fp) return 0;
 
-    while (count < MAX_STUDENTS && fgets(buffer, sizeof(buffer), fp)) {
-        Student *s = &students[count];
-        trim_newline(buffer);
-        if (sscanf(buffer, "%d|%63[^|]|%31[^|]|%d|%d|%f|%2[^|]|%f",
-                   &s->id, s->name, s->dept, &s->semester, &s->attendance,
-                   &s->marks, s->grade, &s->cgpa) == 8) count++;
+int loadStudents(Student s[]) {
+    FILE *fp = fopen(STUDENT_DB, "r");
+    int n = 0;
+
+    if (fp == NULL)
+        return 0;
+
+    while (n < MAX_STUDENTS &&
+           fscanf(fp, "%d %49s %19s %d %d %f %2s %f",
+                  &s[n].id, s[n].name, s[n].dept,
+                  &s[n].semester, &s[n].attendance,
+                  &s[n].marks, s[n].grade, &s[n].cgpa) == 8) {
+        n++;
     }
+
     fclose(fp);
-    return count;
+    return n;
 }
 
-static int save_students(const Student students[], int count) {
-    char temp_path[MAX_PATH_LEN];
-    FILE *fp;
-    if (strlen(student_db) + 5 >= sizeof(temp_path)) return 0;
-    strcpy(temp_path, student_db);
-    strcat(temp_path, ".tmp");
-    fp = fopen(temp_path, "w");
-    if (!fp) return 0;
+int saveStudents(Student s[], int n) {
+    FILE *fp = fopen(STUDENT_DB, "w");
 
-    for (int i = 0; i < count; i++) {
-        fprintf(fp, "%d|%s|%s|%d|%d|%.2f|%s|%.2f\n", students[i].id,
-                students[i].name, students[i].dept, students[i].semester,
-                students[i].attendance, students[i].marks, students[i].grade,
-                students[i].cgpa);
+    if (fp == NULL)
+        return 0;
+
+    for (int i = 0; i < n; i++) {
+        fprintf(fp, "%d %s %s %d %d %.2f %s %.2f\n",
+                s[i].id, s[i].name, s[i].dept, s[i].semester,
+                s[i].attendance, s[i].marks, s[i].grade, s[i].cgpa);
     }
-    fclose(fp);
-    return replace_file(temp_path, student_db);
-}
 
-static int find_student(const Student students[], int count, int id) {
-    for (int i = 0; i < count; i++) if (students[i].id == id) return i;
-    return -1;
-}
-
-static void assign_grade(Student *student) {
-    if (student->marks >= 80) strcpy(student->grade, "A+");
-    else if (student->marks >= 75) strcpy(student->grade, "A");
-    else if (student->marks >= 70) strcpy(student->grade, "A-");
-    else if (student->marks >= 65) strcpy(student->grade, "B+");
-    else if (student->marks >= 60) strcpy(student->grade, "B");
-    else if (student->marks >= 55) strcpy(student->grade, "B-");
-    else if (student->marks >= 50) strcpy(student->grade, "C+");
-    else if (student->marks >= 45) strcpy(student->grade, "C");
-    else if (student->marks >= 40) strcpy(student->grade, "D");
-    else strcpy(student->grade, "F");
-}
-
-static int get_total_classes(void) {
-    FILE *fp = fopen(class_count_db, "r");
-    int total = 0;
-    if (fp) {
-        if (fscanf(fp, "%d", &total) != 1) total = 0;
-        fclose(fp);
-    }
-    return total >= 0 ? total : 0;
-}
-
-static int save_total_classes(int total) {
-    FILE *fp = fopen(class_count_db, "w");
-    if (!fp) return 0;
-    fprintf(fp, "%d\n", total);
     fclose(fp);
     return 1;
 }
 
-static void print_student(const Student *student) {
-    int total = get_total_classes();
-    float attendance = total > 0 ? student->attendance * 100.0f / total : 0.0f;
+int getTotalClasses(void) {
+    FILE *fp = fopen(CLASS_COUNT_DB, "r");
+    int totalClass = 0;
+
+    if (fp != NULL) {
+        if (fscanf(fp, "%d", &totalClass) != 1)
+            totalClass = 0;
+
+        fclose(fp);
+    }
+
+    return totalClass >= 0 ? totalClass : 0;
+}
+
+int saveTotalClasses(int totalClass) {
+    FILE *fp = fopen(CLASS_COUNT_DB, "w");
+
+    if (fp == NULL)
+        return 0;
+
+    fprintf(fp, "%d\n", totalClass);
+    fclose(fp);
+
+    return 1;
+}
+
+void sortStudents(Student s[], int n, int byMarks) {
+    for (int i = 0; i < n - 1; i++) {
+        for (int j = 0; j < n - i - 1; j++) {
+            int swap = byMarks
+                       ? (s[j].marks < s[j + 1].marks)
+                       : (s[j].id > s[j + 1].id);
+
+            if (swap) {
+                Student temp = s[j];
+                s[j] = s[j + 1];
+                s[j + 1] = temp;
+            }
+        }
+    }
+}
+
+void printStudent(Student *s, int totalClass) {
+    float attendancePercent = 0.0f;
+
+    if (totalClass > 0)
+        attendancePercent = (s->attendance * 100.0f) / totalClass;
+
     printf("\n+--------------------------------------------------------------+\n");
-    printf("| Student ID : %-45d |\n", student->id);
-    printf("| Name       : %-45s |\n", student->name);
-    printf("| Department : %-45s |\n", student->dept);
-    printf("| Semester   : %-45d |\n", student->semester);
-    printf("| Attendance : %-5d (%6.2f%%)%31s |\n", student->attendance, attendance, "");
-    printf("| Marks      : %-45.2f |\n", student->marks);
-    printf("| Grade      : %-45s |\n", student->grade);
-    printf("| CGPA       : %-45.2f |\n", student->cgpa);
+    printf("| ID         : %-46d |\n", s->id);
+    printf("| Name       : %-46s |\n", s->name);
+    printf("| Department : %-46s |\n", s->dept);
+    printf("| Semester   : %-46d |\n", s->semester);
+    printf("| Attendance : %d (%6.2f%%)%35s |\n",
+           s->attendance, attendancePercent, "");
+    printf("| Marks      : %-46.2f |\n", s->marks);
+    printf("| Grade      : %-46s |\n", s->grade);
+    printf("| CGPA       : %-46.2f |\n", s->cgpa);
     printf("+--------------------------------------------------------------+\n");
 }
 
-/* ---------- Faculty ---------- */
-static int faculty_login(char *name, char *dept, size_t name_size, size_t dept_size) {
-    FILE *fp = fopen(faculty_db, "r");
-    char buffer[MAX_LINE];
-    int wanted = read_int_range("Faculty ID: ", 1, 999999999);
-    int id;
-    if (!fp) return 0;
+int findStudent(Student s[], int n, int id) {
+    for (int i = 0; i < n; i++) {
+        if (s[i].id == id)
+            return i;
+    }
 
-    while (fgets(buffer, sizeof(buffer), fp)) {
-        trim_newline(buffer);
-        if (sscanf(buffer, "%d|%63[^|]|%31[^\n]", &id, name, dept) == 3 && id == wanted) {
-            name[name_size - 1] = '\0';
-            dept[dept_size - 1] = '\0';
+    return -1;
+}
+
+void assignGrade(Student *s) {
+    if (s->marks >= 80)
+        strcpy(s->grade, "A+");
+    else if (s->marks >= 75)
+        strcpy(s->grade, "A");
+    else if (s->marks >= 70)
+        strcpy(s->grade, "A-");
+    else if (s->marks >= 65)
+        strcpy(s->grade, "B+");
+    else if (s->marks >= 60)
+        strcpy(s->grade, "B");
+    else if (s->marks >= 55)
+        strcpy(s->grade, "B-");
+    else if (s->marks >= 50)
+        strcpy(s->grade, "C+");
+    else if (s->marks >= 45)
+        strcpy(s->grade, "C");
+    else if (s->marks >= 40)
+        strcpy(s->grade, "D");
+    else
+        strcpy(s->grade, "F");
+}
+
+/* ---------- Main ---------- */
+
+void teacherPortal(void);
+void stdPortal(int userid);
+
+void addStd(void);
+void stdrecords(int userid);
+void searchStd(void);
+void stopwatch(void);
+void updateStd(void);
+void quiz(int userid);
+void deleteStd(void);
+void addQuiz(void);
+void showStds(void);
+void utilities(int userid);
+void goalTracker(int userid);
+void attendance(void);
+void sgpa(int userid);
+void marksInput(void);
+
+int facultyLogin(char faculty[], char dept[]) {
+    FILE *fp = fopen(FACULTY_DB, "r");
+    int userId, fileId;
+    char fileFaculty[50], fileDept[20];
+
+    if (fp == NULL)
+        return 0;
+
+    userId = readInt("Faculty ID: ", 1, 999999999);
+
+    while (fscanf(fp, "%d %49s %19s",
+                  &fileId, fileFaculty, fileDept) == 3) {
+        if (fileId == userId) {
+            strcpy(faculty, fileFaculty);
+            strcpy(dept, fileDept);
             fclose(fp);
             return 1;
         }
     }
+
     fclose(fp);
     return 0;
-}
-
-static void add_student(void) {
-    Student students[MAX_STUDENTS], student;
-    char buffer[MAX_NAME];
-    int count = load_students(students);
-    banner("Add Student", "Create a new student record.");
-
-    if (count >= MAX_STUDENTS) { error_message("Student limit reached."); pause_screen(); return; }
-    student.id = read_int_range("Student ID: ", 1, 999999999);
-    if (find_student(students, count, student.id) >= 0) {
-        error_message("A student with that ID already exists."); pause_screen(); return;
-    }
-
-    do { read_line("Name: ", buffer, sizeof(buffer)); if (strchr(buffer, '|') || !*buffer) printf("  Name cannot be empty or contain '|'.\n"); }
-    while (strchr(buffer, '|') || !*buffer);
-    strcpy(student.name, buffer);
-    do { read_line("Department: ", buffer, sizeof(buffer)); if (strchr(buffer, '|') || !*buffer) printf("  Department cannot be empty or contain '|'.\n"); }
-    while (strchr(buffer, '|') || !*buffer);
-    strcpy(student.dept, buffer);
-
-    student.semester = read_int_range("Semester (1-20): ", 1, 20);
-    student.attendance = read_int_range("Attendance count: ", 0, 10000);
-    student.marks = read_float_range("Marks (0-100): ", 0, 100);
-    student.cgpa = read_float_range("CGPA (0-4): ", 0, 4);
-    assign_grade(&student);
-    students[count++] = student;
-
-    if (save_students(students, count)) success("Student added successfully.");
-    else error_message("Could not save student data.");
-    pause_screen();
-}
-
-static void search_student(void) {
-    Student students[MAX_STUDENTS];
-    int count = load_students(students);
-    int id, index;
-    banner("Find Student", "Search by student ID.");
-    id = read_int_range("Student ID: ", 1, 999999999);
-    index = find_student(students, count, id);
-    if (index < 0) error_message("Student record not found.");
-    else print_student(&students[index]);
-    pause_screen();
-}
-
-static void update_student(void) {
-    Student students[MAX_STUDENTS];
-    char buffer[MAX_NAME];
-    int count = load_students(students), id, index;
-    banner("Update Student", "Edit an existing student record.");
-    id = read_int_range("Student ID: ", 1, 999999999);
-    index = find_student(students, count, id);
-    if (index < 0) { error_message("Student record not found."); pause_screen(); return; }
-
-    printf("\nEditing: %s\n\n", students[index].name);
-    do { read_line("Name: ", buffer, sizeof(buffer)); if (strchr(buffer, '|') || !*buffer) printf("  Name cannot be empty or contain '|'.\n"); }
-    while (strchr(buffer, '|') || !*buffer);
-    strcpy(students[index].name, buffer);
-    do { read_line("Department: ", buffer, sizeof(buffer)); if (strchr(buffer, '|') || !*buffer) printf("  Department cannot be empty or contain '|'.\n"); }
-    while (strchr(buffer, '|') || !*buffer);
-    strcpy(students[index].dept, buffer);
-    students[index].semester = read_int_range("Semester (1-20): ", 1, 20);
-    students[index].attendance = read_int_range("Attendance count: ", 0, 10000);
-    students[index].marks = read_float_range("Marks (0-100): ", 0, 100);
-    students[index].cgpa = read_float_range("CGPA (0-4): ", 0, 4);
-    assign_grade(&students[index]);
-
-    if (save_students(students, count)) success("Student updated successfully.");
-    else error_message("Could not save student data.");
-    pause_screen();
-}
-
-static void delete_student(void) {
-    Student students[MAX_STUDENTS];
-    int count = load_students(students), id, index;
-    banner("Delete Student", "Remove a student record.");
-    id = read_int_range("Student ID: ", 1, 999999999);
-    index = find_student(students, count, id);
-    if (index < 0) { error_message("Student record not found."); pause_screen(); return; }
-    print_student(&students[index]);
-    if (read_choice("\nDelete this record? (Y/N): ", "YN") != 'Y') { printf("Deletion cancelled.\n"); pause_screen(); return; }
-    for (int i = index; i < count - 1; i++) students[i] = students[i + 1];
-    if (save_students(students, count - 1)) success("Student deleted successfully.");
-    else error_message("Could not save student data.");
-    pause_screen();
-}
-
-static void show_students(void) {
-    Student students[MAX_STUDENTS];
-    int count = load_students(students);
-    banner("Student Records", "View and sort all student records.");
-    if (count == 0) { error_message("No student records found."); pause_screen(); return; }
-    int sort_choice = read_int_range("Sort by [1] ID  [2] Marks: ", 1, 2);
-    for (int i = 0; i < count; i++) assign_grade(&students[i]);
-    for (int i = 0; i < count - 1; i++) for (int j = i + 1; j < count; j++) {
-        int swap = sort_choice == 1 ? students[i].id > students[j].id : students[i].marks < students[j].marks;
-        if (swap) { Student temp = students[i]; students[i] = students[j]; students[j] = temp; }
-    }
-    printf("\n%-8s %-22s %-10s %-5s %-14s %-7s %-6s\n", "ID", "Name", "Dept", "Sem", "Attendance", "Grade", "CGPA");
-    line(78, '-');
-    int total = get_total_classes();
-    for (int i = 0; i < count; i++) {
-        float attendance = total > 0 ? students[i].attendance * 100.0f / total : 0.0f;
-        printf("%-8d %-22.22s %-10.10s %-5d %5d (%6.2f%%) %-7s %.2f\n", students[i].id, students[i].name, students[i].dept, students[i].semester, students[i].attendance, attendance, students[i].grade, students[i].cgpa);
-    }
-    pause_screen();
-}
-
-static void take_attendance(void) {
-    Student students[MAX_STUDENTS];
-    int count = load_students(students);
-    int total_classes = get_total_classes() + 1;
-    banner("Attendance", "Mark attendance for the next class.");
-    if (count == 0) { error_message("No student records found."); pause_screen(); return; }
-    printf("Class #%d\nEnter P for Present or A for Absent.\n\n", total_classes);
-    for (int i = 0; i < count; i++) {
-        char prompt[128];
-        snprintf(prompt, sizeof(prompt), "%d - %s (P/A): ", students[i].id, students[i].name);
-        if (read_choice(prompt, "PA") == 'P') students[i].attendance++;
-    }
-    if (!save_students(students, count) || !save_total_classes(total_classes)) error_message("Attendance could not be saved completely.");
-    else { printf("\nTotal classes recorded: %d\n", total_classes); success("Attendance saved successfully."); }
-    pause_screen();
-}
-
-static void input_marks(void) {
-    Student students[MAX_STUDENTS];
-    int count = load_students(students);
-    banner("Exam Marks", "Enter marks and update grades.");
-    if (count == 0) { error_message("No student records found."); pause_screen(); return; }
-    if (read_choice("Reset all current marks to zero? (Y/N): ", "YN") == 'Y') {
-        if (read_choice("Confirm reset? This cannot be undone. (Y/N): ", "YN") == 'Y') {
-            for (int i = 0; i < count; i++) { students[i].marks = 0; assign_grade(&students[i]); }
-            printf("\nAll marks reset.\n");
-        } else printf("\nReset cancelled.\n");
-    }
-    printf("\nEnter additional marks for each student.\nUse 0 when no marks should be added.\n\n");
-    for (int i = 0; i < count; i++) {
-        char prompt[128];
-        snprintf(prompt, sizeof(prompt), "%d - %s additional marks (0-%.2f): ", students[i].id, students[i].name, 100.0f - students[i].marks);
-        students[i].marks += read_float_range(prompt, 0, 100.0f - students[i].marks);
-        assign_grade(&students[i]);
-    }
-    if (save_students(students, count)) success("Marks saved and grades updated.");
-    else error_message("Could not save marks.");
-    pause_screen();
-}
-
-static void add_quiz(void) {
-    FILE *fp = fopen(quiz_db, "a");
-    int count;
-    Quiz q;
-    banner("Quiz Manager", "Add questions to the student quiz.");
-    if (!fp) { error_message("Could not open quiz database."); pause_screen(); return; }
-    count = read_int_range("Number of questions: ", 1, 100);
-    for (int i = 0; i < count; i++) {
-        printf("\nQuestion %d\n", i + 1);
-        do { read_line("Question: ", q.question, sizeof(q.question)); } while (!*q.question || strchr(q.question, '|'));
-        do { read_line("Option A: ", q.optA, sizeof(q.optA)); } while (!*q.optA || strchr(q.optA, '|'));
-        do { read_line("Option B: ", q.optB, sizeof(q.optB)); } while (!*q.optB || strchr(q.optB, '|'));
-        do { read_line("Option C: ", q.optC, sizeof(q.optC)); } while (!*q.optC || strchr(q.optC, '|'));
-        do { read_line("Option D: ", q.optD, sizeof(q.optD)); } while (!*q.optD || strchr(q.optD, '|'));
-        q.correct = read_choice("Correct option (A/B/C/D): ", "ABCD");
-        fprintf(fp, "%s|%s|%s|%s|%s|%c\n", q.question, q.optA, q.optB, q.optC, q.optD, q.correct);
-    }
-    fclose(fp);
-    success("Quiz questions added successfully.");
-    pause_screen();
-}
-
-/* ---------- Student utilities ---------- */
-static void show_my_records(int id) {
-    Student students[MAX_STUDENTS];
-    int count = load_students(students), index;
-    banner("My Academic Record", "Your current academic information.");
-    index = find_student(students, count, id);
-    if (index < 0) error_message("Your student record could not be found."); else print_student(&students[index]);
-    pause_screen();
-}
-
-static void sgpa_calculator(int id) {
-    int courses = read_int_range("Number of courses (1-20): ", 1, 20);
-    float weighted_sum = 0, total_credits = 0;
-    banner("SGPA Calculator", "Calculate and optionally save this semester's SGPA.");
-    for (int i = 1; i <= courses; i++) {
-        char prompt[64];
-        float credit, grade_point;
-        snprintf(prompt, sizeof(prompt), "Course %d credit: ", i); credit = read_float_range(prompt, .1f, 10);
-        snprintf(prompt, sizeof(prompt), "Course %d grade point: ", i); grade_point = read_float_range(prompt, 0, 4);
-        weighted_sum += credit * grade_point; total_credits += credit;
-    }
-    { float sgpa = weighted_sum / total_credits;
-      printf("\nYour SGPA: %.2f\n", sgpa);
-      if (read_choice("Save this SGPA to history? (Y/N): ", "YN") == 'Y') {
-          FILE *fp = fopen(sgpa_db, "a");
-          if (fp) { fprintf(fp, "%d %.2f\n", id, sgpa); fclose(fp); success("SGPA saved."); }
-          else error_message("Could not save SGPA history.");
-      }
-    }
-    pause_screen();
-}
-
-static void goal_tracker(int id) {
-    Student students[MAX_STUDENTS];
-    int count = load_students(students), index;
-    float target;
-    banner("CGPA Goal Tracker", "Compare your current CGPA with your target.");
-    index = find_student(students, count, id);
-    if (index < 0) { error_message("Your student record could not be found."); pause_screen(); return; }
-    target = read_float_range("Target CGPA (0-4): ", 0, 4);
-    printf("\nCurrent CGPA : %.2f\nTarget CGPA  : %.2f\n", students[index].cgpa, target);
-    if (students[index].cgpa >= target) success("Goal achieved! Keep it up.");
-    else printf("\nRemaining gap: %.2f\nKeep working toward your target.\n", target - students[index].cgpa);
-    pause_screen();
-}
-
-static void study_timer(void) {
-    int minutes;
-    banner("Study Timer", "Simple countdown timer.");
-    minutes = read_int_range("Study time in minutes (1-180): ", 1, 180);
-    printf("\nTimer started for %d minute%s.\n", minutes, minutes == 1 ? "" : "s");
-    for (int remaining = minutes * 60; remaining > 0; remaining--) {
-        printf("\rTime remaining: %02d:%02d", remaining / 60, remaining % 60); fflush(stdout); sleep_ms(1000);
-    }
-    printf("\rTime remaining: 00:00\n"); success("Time's up! Take a break."); pause_screen();
-}
-
-static void run_quiz(void) {
-    FILE *fp = fopen(quiz_db, "r");
-    Quiz q;
-    char buffer[MAX_LINE];
-    int score = 0, total = 0;
-    banner("Quiz", "Answer the available questions.");
-    if (!fp) { error_message("Quiz data could not be opened."); pause_screen(); return; }
-    while (fgets(buffer, sizeof(buffer), fp)) {
-        trim_newline(buffer);
-        if (sscanf(buffer, "%199[^|]|%99[^|]|%99[^|]|%99[^|]|%99[^|]| %c", q.question, q.optA, q.optB, q.optC, q.optD, &q.correct) != 6) continue;
-        printf("\nQ%d. %s\n  A. %s\n  B. %s\n  C. %s\n  D. %s\n", ++total, q.question, q.optA, q.optB, q.optC, q.optD);
-        if (read_choice("Answer: ", "ABCD") == (char)toupper((unsigned char)q.correct)) score++;
-    }
-    fclose(fp);
-    if (total == 0) printf("\nNo quiz questions are available.\n");
-    else printf("\nFinal score: %d/%d (%.1f%%)\n", score, total, score * 100.0f / total);
-    pause_screen();
-}
-
-/* ---------- Menus ---------- */
-static void faculty_portal(const char *faculty_name, const char *dept) {
-    for (;;) {
-        banner("Faculty Portal", "Manage student records and academic data.");
-        printf("  Logged in as: %s (%s)\n\n", faculty_name, dept);
-        printf("  [1] Add Student\n  [2] Update Student\n  [3] Delete Student\n  [4] Attendance\n  [5] Find Student\n  [6] Show Students\n  [7] Input Marks\n  [8] Quiz Manager\n  [0] Logout\n\n");
-        switch (read_int_range("  Select an option: ", 0, 8)) {
-            case 1: add_student(); break; case 2: update_student(); break; case 3: delete_student(); break;
-            case 4: take_attendance(); break; case 5: search_student(); break; case 6: show_students(); break;
-            case 7: input_marks(); break; case 8: add_quiz(); break; case 0: return;
-        }
-    }
-}
-
-static void student_portal(int id) {
-    for (;;) {
-        Student students[MAX_STUDENTS];
-        int count = load_students(students), index = find_student(students, count, id);
-        if (index < 0) { banner("Student Portal", NULL); error_message("Your student record could not be found."); pause_screen(); return; }
-        banner("Student Portal", "Academic tools and personal information.");
-        printf("  Welcome, %s\n\n  [1] My Academic Record\n  [2] SGPA Calculator\n  [3] CGPA Goal Tracker\n  [4] Study Timer\n  [5] Quiz\n  [0] Logout\n\n", students[index].name);
-        switch (read_int_range("  Select an option: ", 0, 5)) {
-            case 1: show_my_records(id); break; case 2: sgpa_calculator(id); break; case 3: goal_tracker(id); break;
-            case 4: study_timer(); break; case 5: run_quiz(); break; case 0: return;
-        }
-    }
 }
 
 int main(void) {
-    char faculty_name[MAX_NAME], dept[MAX_DEPT];
-    set_application_directory();
-    initialize_data_files();
-    banner("Welcome", "A simple academic management system in C.");
-    printf("\n  [1] Faculty\n  [2] Student\n  [0] Exit\n\n");
-    switch (read_int_range("  Select your role: ", 0, 2)) {
-        case 1:
-            banner("Faculty Login", "Enter your faculty ID.");
-            if (faculty_login(faculty_name, dept, sizeof(faculty_name), sizeof(dept))) {
-                printf("\nWelcome, %s.\n", faculty_name); sleep_ms(500); faculty_portal(faculty_name, dept);
-            } else { error_message("Access denied. Faculty ID not found."); pause_screen(); }
-            break;
-        case 2: student_portal(read_int_range("  Student ID: ", 1, 999999999)); break;
-        case 0: break;
+    int userIn;
+
+    setupDataDirectory();
+    initializeDataFiles();
+
+    headerf("Welcome");
+    printf("\n  [1] Faculty\n");
+    printf("  [2] Student\n");
+    printf("  [0] Exit\n\n");
+
+    userIn = readInt("  Select your role: ", 0, 2);
+
+    if (userIn == 1) {
+        char faculty[50], dept[20];
+
+        headerf("Faculty Login");
+
+        if (facultyLogin(faculty, dept)) {
+            printf("\n  Welcome, %s (%s Department)\n", faculty, dept);
+            Sleep(700);
+            teacherPortal();
+        } else {
+            errorMessage("Access denied. Faculty ID not found.");
+            pressEnter();
+        }
     }
+    else if (userIn == 2) {
+        int userid;
+
+        headerf("Student Login");
+        userid = readInt("  Student ID: ", 1, 999999999);
+        stdPortal(userid);
+    }
+
     return 0;
+}
+
+/* ---------- Faculty portal ---------- */
+
+void teacherPortal(void) {
+    int choice;
+
+    do {
+        headerf("Faculty Portal");
+
+        printf("\n  [1] Add Student\n");
+        printf("  [2] Update Student Record\n");
+        printf("  [3] Delete Student Record\n");
+        printf("  [4] Attendance\n");
+        printf("  [5] Find Student\n");
+        printf("  [6] Show Student Records\n");
+        printf("  [7] Input Exam Marks\n");
+        printf("  [8] Quiz Manager\n");
+        printf("  [0] Logout\n\n");
+
+        choice = readInt("  Select an option: ", 0, 8);
+
+        switch (choice) {
+        case 1: addStd();      break;
+        case 2: updateStd();   break;
+        case 3: deleteStd();   break;
+        case 4: attendance();  break;
+        case 5: searchStd();   break;
+        case 6: showStds();    break;
+        case 7: marksInput();  break;
+        case 8: addQuiz();     break;
+        case 0: return;
+        }
+    } while (1);
+}
+
+void addStd(void) {
+    Student s[MAX_STUDENTS];
+    Student student;
+    int n = loadStudents(s);
+    int totalClass = getTotalClasses();
+
+    headerf("Add Student");
+
+    if (n >= MAX_STUDENTS) {
+        errorMessage("Student limit reached.");
+        pressEnter();
+        return;
+    }
+
+    student.id = readInt("  Student ID: ", 1, 999999999);
+
+    if (findStudent(s, n, student.id) != -1) {
+        errorMessage("That student ID already exists.");
+        pressEnter();
+        return;
+    }
+
+    readText("  Name: ", student.name, sizeof(student.name));
+    readText("  Department: ", student.dept, sizeof(student.dept));
+
+    student.semester = readInt("  Semester (1-20): ", 1, 20);
+    student.attendance = readInt("  Attendance count: ",
+                                 0, totalClass > 0 ? totalClass : 10000);
+    student.marks = readFloat("  Marks (0-100): ", 0, 100);
+    student.cgpa = readFloat("  CGPA (0-4): ", 0, 4);
+
+    assignGrade(&student);
+    s[n] = student;
+
+    if (saveStudents(s, n + 1))
+        successMessage("Student added successfully.");
+    else
+        errorMessage("Could not save the student record.");
+
+    pressEnter();
+}
+
+void searchStd(void) {
+    Student s[MAX_STUDENTS];
+    int n = loadStudents(s);
+    int searchId, index;
+
+    headerf("Find Student");
+
+    if (n == 0) {
+        errorMessage("No student records found.");
+        pressEnter();
+        return;
+    }
+
+    searchId = readInt("  Student ID: ", 1, 999999999);
+    index = findStudent(s, n, searchId);
+
+    if (index == -1)
+        errorMessage("Student not found.");
+    else
+        printStudent(&s[index], getTotalClasses());
+
+    pressEnter();
+}
+
+void updateStd(void) {
+    Student s[MAX_STUDENTS];
+    char name[50], dept[20];
+    int n = loadStudents(s);
+    int searchId, i;
+    int totalClass = getTotalClasses();
+
+    headerf("Update Student");
+
+    if (n == 0) {
+        errorMessage("No student records found.");
+        pressEnter();
+        return;
+    }
+
+    searchId = readInt("  Student ID: ", 1, 999999999);
+    i = findStudent(s, n, searchId);
+
+    if (i == -1) {
+        errorMessage("Student not found.");
+        pressEnter();
+        return;
+    }
+
+    printf("\n  Current record:\n");
+    printStudent(&s[i], totalClass);
+
+    printf("\n  Enter new information:\n");
+    readText("  Name: ", name, sizeof(name));
+    readText("  Department: ", dept, sizeof(dept));
+
+    strcpy(s[i].name, name);
+    strcpy(s[i].dept, dept);
+    s[i].semester = readInt("  Semester (1-20): ", 1, 20);
+    s[i].attendance = readInt("  Attendance count: ",
+                              0, totalClass > 0 ? totalClass : 10000);
+    s[i].marks = readFloat("  Marks (0-100): ", 0, 100);
+    s[i].cgpa = readFloat("  CGPA (0-4): ", 0, 4);
+
+    assignGrade(&s[i]);
+
+    if (saveStudents(s, n))
+        successMessage("Student record updated successfully.");
+    else
+        errorMessage("Could not save the updated record.");
+
+    pressEnter();
+}
+
+void deleteStd(void) {
+    Student s[MAX_STUDENTS];
+    int n = loadStudents(s);
+    int searchId, index;
+
+    headerf("Delete Student");
+
+    if (n == 0) {
+        errorMessage("No student records found.");
+        pressEnter();
+        return;
+    }
+
+    searchId = readInt("  Student ID: ", 1, 999999999);
+    index = findStudent(s, n, searchId);
+
+    if (index == -1) {
+        errorMessage("Student not found.");
+        pressEnter();
+        return;
+    }
+
+    printStudent(&s[index], getTotalClasses());
+
+    if (readChoice("\n  Delete this record? (Y/N): ", "YN") != 'Y') {
+        printf("\n  Deletion cancelled.\n");
+        pressEnter();
+        return;
+    }
+
+    for (int i = index; i < n - 1; i++)
+        s[i] = s[i + 1];
+
+    if (saveStudents(s, n - 1))
+        successMessage("Student record deleted successfully.");
+    else
+        errorMessage("Could not save the student database.");
+
+    pressEnter();
+}
+
+void showStds(void) {
+    Student s[MAX_STUDENTS];
+    int n = loadStudents(s);
+    int choice;
+    int totalClass;
+
+    headerf("Student Records");
+
+    if (n == 0) {
+        errorMessage("No student records found.");
+        pressEnter();
+        return;
+    }
+
+    printf("\n  [1] Sort by ID\n");
+    printf("  [2] Sort by Marks\n\n");
+    choice = readInt("  Sort by: ", 1, 2);
+
+    for (int i = 0; i < n; i++)
+        assignGrade(&s[i]);
+
+    sortStudents(s, n, choice == 2);
+    totalClass = getTotalClasses();
+
+    printf("\n%-8s %-18s %-8s %-5s %-15s %-7s %-6s\n",
+           "ID", "Name", "Dept", "Sem", "Attendance", "Grade", "CGPA");
+    printf("--------------------------------------------------------------------------\n");
+
+    for (int i = 0; i < n; i++) {
+        float percent = totalClass > 0
+                        ? (s[i].attendance * 100.0f) / totalClass
+                        : 0.0f;
+
+        printf("%-8d %-18s %-8s %-5d %5d (%6.2f%%) %-7s %.2f\n",
+               s[i].id, s[i].name, s[i].dept, s[i].semester,
+               s[i].attendance, percent, s[i].grade, s[i].cgpa);
+    }
+
+    pressEnter();
+}
+
+void attendance(void) {
+    Student s[MAX_STUDENTS];
+    int n = loadStudents(s);
+
+    headerf("Attendance");
+
+    if (n == 0) {
+        errorMessage("No student records found.");
+        pressEnter();
+        return;
+    }
+
+    int totalClass = getTotalClasses() + 1;
+
+    printf("\n  Class #%d\n", totalClass);
+    printf("  Mark P for Present or A for Absent.\n\n");
+
+    for (int i = 0; i < n; i++) {
+        char prompt[100];
+
+        snprintf(prompt, sizeof(prompt),
+                 "  %d - %s (P/A): ", s[i].id, s[i].name);
+
+        if (readChoice(prompt, "PA") == 'P')
+            s[i].attendance++;
+    }
+
+    if (!saveStudents(s, n)) {
+        errorMessage("Student attendance could not be saved.");
+        pressEnter();
+        return;
+    }
+
+    if (!saveTotalClasses(totalClass))
+        errorMessage("Attendance saved, but class count could not be updated.");
+    else {
+        printf("\n  Total Classes Taken: %d\n", totalClass);
+        successMessage("Attendance updated successfully.");
+    }
+
+    pressEnter();
+}
+
+void marksInput(void) {
+    Student s[MAX_STUDENTS];
+    int n = loadStudents(s);
+    char choice;
+
+    headerf("Exam Marks");
+
+    if (n == 0) {
+        errorMessage("No student records found.");
+        pressEnter();
+        return;
+    }
+
+    choice = readChoice("  Reset all marks first? (Y/N): ", "YN");
+
+    if (choice == 'Y') {
+        if (readChoice("  Confirm reset? (Y/N): ", "YN") == 'Y') {
+            for (int i = 0; i < n; i++) {
+                s[i].marks = 0;
+                assignGrade(&s[i]);
+            }
+
+            if (saveStudents(s, n))
+                successMessage("All marks have been reset.");
+            else
+                errorMessage("Could not save the reset marks.");
+
+            pressEnter();
+            return;
+        }
+
+        printf("\n  Reset cancelled.\n");
+        pressEnter();
+        return;
+    }
+
+    printf("\n  Enter additional marks for each student.\n");
+    printf("  Use 0 when no marks should be added.\n\n");
+
+    for (int i = 0; i < n; i++) {
+        char prompt[120];
+        float remaining = 100.0f - s[i].marks;
+
+        snprintf(prompt, sizeof(prompt),
+                 "  %d - %s additional marks (0-%.2f): ",
+                 s[i].id, s[i].name, remaining);
+
+        s[i].marks += readFloat(prompt, 0, remaining);
+        assignGrade(&s[i]);
+    }
+
+    if (saveStudents(s, n))
+        successMessage("Marks saved and grades updated.");
+    else
+        errorMessage("Could not save marks.");
+
+    pressEnter();
+}
+
+/* ---------- Student portal ---------- */
+
+void stdPortal(int userid) {
+    Student s[MAX_STUDENTS];
+    int n = loadStudents(s);
+    int index = findStudent(s, n, userid);
+    int choice;
+
+    if (index == -1) {
+        headerf("Student Login");
+        errorMessage("Student ID not found.");
+        pressEnter();
+        return;
+    }
+
+    do {
+        headerf("Student Portal");
+
+        printf("\n  Welcome, %s (%s)\n\n", s[index].name, s[index].dept);
+        printf("  [1] My Academic Record\n");
+        printf("  [2] Utilities\n");
+        printf("  [3] Quiz\n");
+        printf("  [0] Logout\n\n");
+
+        choice = readInt("  Select an option: ", 0, 3);
+
+        switch (choice) {
+        case 1: stdrecords(userid); break;
+        case 2: utilities(userid); break;
+        case 3: quiz(userid); break;
+        case 0: return;
+        }
+    } while (1);
+}
+
+void stdrecords(int userid) {
+    Student s[MAX_STUDENTS];
+    int n = loadStudents(s);
+    int index = findStudent(s, n, userid);
+
+    headerf("My Academic Record");
+
+    if (index == -1)
+        errorMessage("Your record could not be found.");
+    else
+        printStudent(&s[index], getTotalClasses());
+
+    pressEnter();
+}
+
+void utilities(int userid) {
+    int choice;
+
+    do {
+        headerf("Student Utilities");
+
+        printf("\n  [1] Study Timer\n");
+        printf("  [2] SGPA Calculator\n");
+        printf("  [3] Goal Tracker\n");
+        printf("  [0] Return\n\n");
+
+        choice = readInt("  Select an option: ", 0, 3);
+
+        switch (choice) {
+        case 1: stopwatch(); break;
+        case 2: sgpa(userid); break;
+        case 3: goalTracker(userid); break;
+        case 0: return;
+        }
+    } while (1);
+}
+
+/* ---------- Quiz ---------- */
+
+void addQuiz(void) {
+    FILE *fp = fopen(QUIZ_DB, "a");
+    Quiz q;
+    int n;
+
+    headerf("Quiz Manager");
+
+    if (fp == NULL) {
+        errorMessage("Could not open the quiz database.");
+        pressEnter();
+        return;
+    }
+
+    n = readInt("  Number of questions to add (1-50): ", 1, 50);
+
+    for (int i = 0; i < n; i++) {
+        printf("\n  Question %d\n", i + 1);
+
+        readText("  Question: ", q.question, sizeof(q.question));
+        readText("  Option A: ", q.optA, sizeof(q.optA));
+        readText("  Option B: ", q.optB, sizeof(q.optB));
+        readText("  Option C: ", q.optC, sizeof(q.optC));
+        readText("  Option D: ", q.optD, sizeof(q.optD));
+
+        q.correct = readChoice("  Correct option (A/B/C/D): ", "ABCD");
+
+        fprintf(fp, "%s|%s|%s|%s|%s|%c\n",
+                q.question, q.optA, q.optB,
+                q.optC, q.optD, q.correct);
+    }
+
+    fclose(fp);
+
+    successMessage("Quiz questions added successfully.");
+    pressEnter();
+}
+
+void quiz(int userid) {
+    FILE *fp = fopen(QUIZ_DB, "r");
+    Quiz q;
+    char buffer[MAX_LINE];
+    int score = 0, total = 0;
+
+    headerf("Quiz");
+
+    if (fp == NULL) {
+        errorMessage("No quiz is available.");
+        pressEnter();
+        return;
+    }
+
+    while (fgets(buffer, sizeof(buffer), fp)) {
+        char answer;
+
+        buffer[strcspn(buffer, "\r\n")] = '\0';
+
+        if (sscanf(buffer, "%199[^|]|%99[^|]|%99[^|]|%99[^|]|%99[^|]| %c",
+                   q.question, q.optA, q.optB,
+                   q.optC, q.optD, &q.correct) != 6)
+            continue;
+
+        printf("\nQ%d. %s\n", total + 1, q.question);
+        printf("  A. %s\n", q.optA);
+        printf("  B. %s\n", q.optB);
+        printf("  C. %s\n", q.optC);
+        printf("  D. %s\n", q.optD);
+
+        answer = readChoice("  Your answer: ", "ABCD");
+
+        if (answer == (char)toupper((unsigned char)q.correct))
+            score++;
+
+        total++;
+    }
+
+    fclose(fp);
+
+    if (total == 0)
+        printf("\n  No valid quiz questions are available.\n");
+    else
+        printf("\n  Your Score: %d/%d (%.1f%%)\n",
+               score, total, score * 100.0f / total);
+
+    /* Quiz remains an independent activity; it does not alter marks. */
+    (void)userid;
+    pressEnter();
+}
+
+/* ---------- Utilities ---------- */
+
+void stopwatch(void) {
+    int minutes;
+
+    headerf("Study Timer");
+
+    minutes = readInt("  Study time (minutes, 1-180): ", 1, 180);
+
+    printf("\n  Timer started for %d minute%s.\n",
+           minutes, minutes == 1 ? "" : "s");
+
+    for (int remaining = minutes * 60; remaining > 0; remaining--) {
+        printf("\r  Time Left: %02d:%02d",
+               remaining / 60, remaining % 60);
+
+        fflush(stdout);
+        Sleep(1000);
+    }
+
+    printf("\r  Time Left: 00:00\n");
+    successMessage("Time's up! Take a break.");
+    pressEnter();
+}
+
+void sgpa(int userid) {
+    int n;
+    float sum = 0.0f;
+    float totalCredit = 0.0f;
+
+    headerf("SGPA Calculator");
+
+    n = readInt("  Number of courses (1-20): ", 1, 20);
+
+    for (int i = 1; i <= n; i++) {
+        float credit, grade;
+        char prompt[80];
+
+        snprintf(prompt, sizeof(prompt),
+                 "  Course %d credit (0.1-10): ", i);
+        credit = readFloat(prompt, 0.1f, 10.0f);
+
+        snprintf(prompt, sizeof(prompt),
+                 "  Course %d grade point (0-4): ", i);
+        grade = readFloat(prompt, 0.0f, 4.0f);
+
+        sum += credit * grade;
+        totalCredit += credit;
+    }
+
+    if (totalCredit <= 0) {
+        errorMessage("Invalid total credits.");
+        pressEnter();
+        return;
+    }
+
+    float newSGPA = sum / totalCredit;
+
+    printf("\n  SGPA = %.2f\n", newSGPA);
+
+    if (readChoice("  Save this SGPA to history? (Y/N): ", "YN") == 'Y') {
+        FILE *fp = fopen(SGPA_DB, "a");
+
+        if (fp != NULL) {
+            fprintf(fp, "%d %.2f\n", userid, newSGPA);
+            fclose(fp);
+            successMessage("SGPA saved.");
+        } else {
+            errorMessage("Could not save SGPA history.");
+        }
+    }
+
+    /* SGPA is only a calculation/history feature.
+       It does not automatically change CGPA or semester. */
+
+    pressEnter();
+}
+
+void goalTracker(int userid) {
+    Student s[MAX_STUDENTS];
+    int n = loadStudents(s);
+    int index = findStudent(s, n, userid);
+    float targetCGPA;
+
+    headerf("CGPA Goal Tracker");
+
+    if (index == -1) {
+        errorMessage("Student not found.");
+        pressEnter();
+        return;
+    }
+
+    targetCGPA = readFloat("  Target CGPA (0-4): ", 0, 4);
+
+    printf("\n  Current CGPA : %.2f\n", s[index].cgpa);
+    printf("  Target CGPA  : %.2f\n", targetCGPA);
+
+    if (s[index].cgpa >= targetCGPA)
+        successMessage("Goal achieved! Keep it up.");
+    else
+        printf("\n  You need %.2f more to reach your goal.\n",
+               targetCGPA - s[index].cgpa);
+
+    pressEnter();
 }
