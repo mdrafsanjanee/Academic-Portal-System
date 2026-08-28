@@ -2,7 +2,7 @@ name: Build Windows Release
 
 on:
   push:
-    branches: [master, refactor/professional-release]
+    branches: [master]
     tags: ['v*']
   pull_request:
     branches: [master]
@@ -23,7 +23,7 @@ jobs:
         shell: cmd
         run: |
           if not exist dist mkdir dist
-          gcc src\AcademicSystemPortal.c -std=c11 -Wall -Wextra -o dist\AcademicSystemPortal.exe
+          gcc src\AcademicSystemPortal.c -std=c11 -Wall -Wextra -pedantic -o dist\AcademicSystemPortal.exe
 
       - name: Package
         shell: pwsh
