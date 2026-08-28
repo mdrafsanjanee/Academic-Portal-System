@@ -2,7 +2,8 @@
 
 A lightweight **Academic Management System written in C**, built around a simple console interface and text-file persistence. The project demonstrates practical use of structures, arrays, functions, file handling, validation, sorting, and role-based menus.
 
-[![Build](https://github.com/mdrafsanjanee/Academic-Portal-System/actions/workflows/build.yml/badge.svg)](https://github.com/mdrafsanjanee/Academic-Portal-System/actions/workflows/build.yml)
+[![Build](https://github.com/mdrafsanjanee/Academic-Portal-System/actions/workflows/build.yml/badge.svg)](https://github.com/mdrafsanjanee/Academic-Portal-System/releases)
+[![Latest Release](https://img.shields.io/github/v/release/mdrafsanjanee/Academic-Portal-System)](https://github.com/mdrafsanjanee/Academic-Portal-System/releases/latest)
 
 ## Why this project?
 
@@ -40,8 +41,6 @@ Academic-Portal-System/
 ├── .github/
 │   └── workflows/
 │       └── build.yml                # Automated Windows build/package
-├── Backup/                          # Earlier development prototype
-├── Editable items/                  # Editable project assets
 ├── Submitables/                     # Original academic submission
 ├── LICENSE
 └── README.md
